@@ -4,6 +4,7 @@ export type Competitor = { name: string; competitionId: string }
 
 export const competitorsSchema: CollectionSchema = {
   name: 'competitors',
+  teamField: 'competitionId',
   columns: [
     { name: 'name', storage: 'text', interpretation: 'plain', required: true },
     {
@@ -15,7 +16,7 @@ export const competitorsSchema: CollectionSchema = {
   // It creates as the caller, so createdBy matches the competition owner.
   permissions: {
     viewer: { read: false, create: false, update: false, delete: false },
-    member: { read: 'own', create: false, update: false, delete: false },
-    admin: { read: 'own', create: false, update: false, delete: false },
+    member: { read: 'team', create: false, update: false, delete: false },
+    admin: { read: 'team', create: false, update: false, delete: false },
   },
 }

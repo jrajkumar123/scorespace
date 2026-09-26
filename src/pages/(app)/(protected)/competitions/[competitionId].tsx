@@ -1,10 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getAuthToken, useQuery } from 'deepspace'
+import { getAuthToken, useAuth, useQuery } from 'deepspace'
 import {
   Button, Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, EmptyState, Input, Label, useToast,
 } from '@/components/ui'
+import { CompetitionJudges } from '@/components/competition-judges'
 import type { Competition } from '@/schemas/competitions-schema'
 import type { Competitor } from '@/schemas/competitors-schema'
 
@@ -20,6 +21,7 @@ export default function CompetitionPage() {
 }
 
 function CompetitionDetail({ competitionId }: { competitionId: string }) {
+  const { userId } = useAuth()
   const { records, status, error } = useQuery<Competition>('competitions', {
     where: { recordId: competitionId },
   })
@@ -28,18 +30,29 @@ function CompetitionDetail({ competitionId }: { competitionId: string }) {
   const competition = records[0]
   if (!competition) return <p role="alert">Competition not found or unavailable.</p>
 
+  if (competition.createdBy !== userId) return (
+    <>
+      <h1 className="text-3xl font-semibold">{competition.data.name}</h1>
+      <Link className="underline" to={`/competitions/${encodeURIComponent(competition.recordId)}/judge`}>Judge Competition</Link>
+    </>
+  )
   return (
     <>
       <h1 className="break-words text-3xl font-semibold">{competition.data.name}</h1>
-      <Link className="inline-block rounded-lg bg-primary px-4 py-2 text-primary-foreground"
-        to={`/competitions/${encodeURIComponent(competition.recordId)}/judge`}>Judge Competition</Link>
+      <div className="flex flex-wrap gap-3">
+        <Link className="inline-block rounded-lg bg-primary px-4 py-2 text-primary-foreground"
+          to={`/competitions/${encodeURIComponent(competition.recordId)}/judge`}>Judge Competition</Link>
+        <Link className="inline-block rounded-lg border border-border px-4 py-2 hover:bg-muted"
+          to={`/competitions/${encodeURIComponent(competition.recordId)}/results`}>Live Results</Link>
+      </div>
       <Competitors competitionId={competition.recordId} />
+      <CompetitionJudges competitionId={competition.recordId} />
     </>
   )
 }
 
 function Competitors({ competitionId }: { competitionId: string }) {
-  // This filter selects the parent; the collection's 'own' rule enforces privacy.
+  // This filter selects the parent; the collection's team rule enforces privacy.
   const { records, status, error } = useQuery<Competitor>('competitors', {
     where: { competitionId }, orderBy: 'createdAt', orderDir: 'asc',
   })

@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { AuthGate, useMutations, useQuery } from 'deepspace'
+import { AuthGate, useAuth, useMutations, useQuery } from 'deepspace'
 import { Link } from 'react-router-dom'
 import {
   Button, Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -12,7 +12,8 @@ export default function HomePage() {
 }
 
 function CompetitionDashboard() {
-  // Ownership is enforced by the room, not a browser-side filter.
+  const { userId } = useAuth()
+  // The room returns owned competitions plus explicitly assigned competitions.
   const { records, status, error } = useQuery<Competition>('competitions', {
     orderBy: 'createdAt', orderDir: 'desc',
   })
@@ -72,8 +73,9 @@ function CompetitionDashboard() {
             {records.map((competition) => (
               <li key={competition.recordId} className="break-words rounded-lg border border-border bg-card">
                 <Link className="block rounded-lg p-5 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-                  to={`/competitions/${encodeURIComponent(competition.recordId)}`}>
+                  to={`/competitions/${encodeURIComponent(competition.recordId)}${competition.createdBy === userId ? '' : '/judge'}`}>
                   {competition.data.name}
+                  {competition.createdBy !== userId && <span className="ml-2 text-sm text-muted-foreground">Assigned judge</span>}
                 </Link>
               </li>
             ))}
@@ -84,7 +86,7 @@ function CompetitionDashboard() {
         <DialogContent hideClose={saving}>
           <DialogHeader>
             <DialogTitle>Create Competition</DialogTitle>
-            <DialogDescription>Give your competition a name. Only you can see it.</DialogDescription>
+            <DialogDescription>Give your competition a name. Only you and judges you authorize can see it.</DialogDescription>
           </DialogHeader>
           <form onSubmit={createCompetition} className="space-y-4">
             <div className="space-y-2">

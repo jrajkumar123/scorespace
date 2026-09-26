@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getAuthToken, useQuery } from 'deepspace'
+import { getAuthToken, useAuth, useQuery } from 'deepspace'
 import { Button, EmptyState, Input, Label } from '@/components/ui'
 import type { Competition } from '@/schemas/competitions-schema'
 import type { Competitor } from '@/schemas/competitors-schema'
@@ -35,13 +35,15 @@ function JudgingCompetition({ competitionId }: { competitionId: string }) {
 
 function JudgingList({ competitionId }: { competitionId: string }) {
   const competitors = useQuery<Competitor>('competitors', { where: { competitionId }, orderBy: 'createdAt', orderDir: 'asc' })
-  // The room's 'own' policy returns only the current judge's scores.
-  const scores = useQuery<Score>('scores', { where: { competitionId } })
+  const { userId } = useAuth()
+  // Organizer can read all scores, but this screen must show only their own.
+  // For other judges the room also enforces author-only visibility.
+  const scores = useQuery<Score>('scores', { where: { competitionId, createdBy: userId } })
   if (competitors.status === 'error' || scores.status === 'error') {
     return <p role="alert">Could not load judging data: {competitors.error ?? scores.error ?? 'Connection unavailable.'}</p>
   }
   if (competitors.status !== 'ready' || scores.status !== 'ready') return <p role="status">Loading competitors and scores…</p>
-  if (!competitors.records.length) return <EmptyState title="No competitors yet" description="Return to the competition to add competitors before judging." />
+  if (!competitors.records.length) return <EmptyState title="No competitors yet" description="The organizer has not added competitors yet." />
   const scoresByCompetitor = new Map(scores.records.map((score) => [score.data.competitorId, score.data.value]))
   return (
     <ul aria-label="Judging competitors" className="space-y-4">

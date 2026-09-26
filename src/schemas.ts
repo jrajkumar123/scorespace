@@ -12,6 +12,7 @@ import { usersSchema } from './schemas/users-schema'
 import { settingsSchema } from './schemas/admin-schema'
 import { competitionsSchema } from './schemas/competitions-schema'
 import { competitorsSchema } from './schemas/competitors-schema'
+import { teamMembersSchema } from './schemas/team-members-schema'
 import { scoresSchema } from './schemas/scores-schema'
 
 export const schemas: CollectionSchema[] = [
@@ -20,4 +21,5 @@ export const schemas: CollectionSchema[] = [
   competitionsSchema,
   competitorsSchema,
   scoresSchema,
+  teamMembersSchema,
 ]
