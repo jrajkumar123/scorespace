@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { AuthGate, useMutations, useQuery } from 'deepspace'
+import { Link } from 'react-router-dom'
 import {
   Button, Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, EmptyState, Input, Label, useToast,
@@ -69,8 +70,11 @@ function CompetitionDashboard() {
         {records.length > 0 && (
           <ul className="space-y-3" aria-label="My competitions">
             {records.map((competition) => (
-              <li key={competition.recordId} className="break-words rounded-lg border border-border bg-card p-5">
-                {competition.data.name}
+              <li key={competition.recordId} className="break-words rounded-lg border border-border bg-card">
+                <Link className="block rounded-lg p-5 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                  to={`/competitions/${encodeURIComponent(competition.recordId)}`}>
+                  {competition.data.name}
+                </Link>
               </li>
             ))}
           </ul>
