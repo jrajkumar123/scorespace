@@ -1,10 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { getAuthToken, useAuth, useQuery } from 'deepspace'
 import {
   Button, Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, EmptyState, Input, Label, useToast,
 } from '@/components/ui'
+import { competitionDestination } from '@/lib/competition-navigation'
 import { CompetitionJudges } from '@/components/competition-judges'
 import type { Competition } from '@/schemas/competitions-schema'
 import type { Competitor } from '@/schemas/competitors-schema'
@@ -30,14 +31,12 @@ function CompetitionDetail({ competitionId }: { competitionId: string }) {
   const competition = records[0]
   if (!competition) return <p role="alert">Competition not found or unavailable.</p>
 
-  if (competition.createdBy !== userId) return (
-    <>
-      <h1 className="text-3xl font-semibold">{competition.data.name}</h1>
-      <Link className="underline" to={`/competitions/${encodeURIComponent(competition.recordId)}/judge`}>Judge Competition</Link>
-    </>
-  )
+  const destination = competitionDestination(competition, userId)
+  if (!destination) return <p role="alert">Competition not found or unavailable.</p>
+  if (competition.createdBy !== userId) return <Navigate to={destination} replace />
   return (
     <>
+      <p className="text-sm text-muted-foreground">Organizer · Manage competition</p>
       <h1 className="break-words text-3xl font-semibold">{competition.data.name}</h1>
       <div className="flex flex-wrap gap-3">
         <Link className="inline-block rounded-lg bg-primary px-4 py-2 text-primary-foreground"

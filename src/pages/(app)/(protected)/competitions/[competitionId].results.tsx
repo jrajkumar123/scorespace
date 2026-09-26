@@ -28,6 +28,7 @@ function CompetitionResults({ competitionId }: { competitionId: string }) {
   if (!competition || competition.createdBy !== userId) return <p role="alert">Competition not found or unavailable.</p>
   return (
     <>
+      <p className="text-sm text-muted-foreground">Organizer only</p>
       <h2 className="break-words text-xl font-semibold">{competition.data.name}</h2>
       <Standings competitionId={competition.recordId} />
     </>

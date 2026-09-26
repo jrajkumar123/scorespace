@@ -1,5 +1,5 @@
-/** App name — replaced by the CLI during scaffolding */
-export const APP_NAME = 'scorespace'
+/** Display branding; the immutable app identity below is unchanged. */
+export const APP_NAME = 'ScoreSpace'
 
 /** Immutable app identity — data scope keys to this, so renames never
  *  strand your records.

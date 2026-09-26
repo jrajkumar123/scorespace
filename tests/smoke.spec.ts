@@ -23,6 +23,8 @@ test.describe('Smoke tests', () => {
     await page.goto('/')
     await waitForApp(page)
     await expect(page.getByTestId('static-landing')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Run a competition. Judge together.' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Open dashboard' })).toHaveAttribute('href', '/home')
     expect(errors).toEqual([])
   })
 

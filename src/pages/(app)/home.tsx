@@ -5,6 +5,7 @@ import {
   Button, Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, EmptyState, Input, Label, useToast,
 } from '@/components/ui'
+import { competitionDestination } from '@/lib/competition-navigation'
 import type { Competition } from '@/schemas/competitions-schema'
 
 export default function HomePage() {
@@ -55,7 +56,7 @@ function CompetitionDashboard() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold">ScoreSpace</h1>
-          <p className="mt-2 text-muted-foreground">Your competitions, in one place.</p>
+          <p className="mt-2 text-muted-foreground">Manage your competitions or judge the ones assigned to you.</p>
         </div>
         <Button disabled={!ready} onClick={() => { setSubmitError(null); setOpen(true) }}>
           Create Competition
@@ -66,14 +67,14 @@ function CompetitionDashboard() {
         {status === 'loading' && <p role="status">Loading competitions…</p>}
         {status === 'error' && <p role="alert" className="text-destructive">Could not load competitions: {error ?? 'Connection unavailable.'}</p>}
         {status === 'ready' && records.length === 0 && (
-          <EmptyState title="No competitions yet" description="Create your first competition to get started." />
+          <EmptyState title="No competitions yet" description="Create a competition, or ask an organizer to authorize you as a judge." />
         )}
         {records.length > 0 && (
           <ul className="space-y-3" aria-label="My competitions">
             {records.map((competition) => (
               <li key={competition.recordId} className="break-words rounded-lg border border-border bg-card">
                 <Link className="block rounded-lg p-5 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-                  to={`/competitions/${encodeURIComponent(competition.recordId)}${competition.createdBy === userId ? '' : '/judge'}`}>
+                  to={competitionDestination(competition, userId) ?? '/home'}>
                   {competition.data.name}
                   {competition.createdBy !== userId && <span className="ml-2 text-sm text-muted-foreground">Assigned judge</span>}
                 </Link>

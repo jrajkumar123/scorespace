@@ -40,22 +40,29 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
   app.post('/api/actions/:name', async (c) => {
     const auth = await resolveAuth(c.req.raw, c.env)
     if (!auth) return c.json({ error: 'Unauthorized' }, 401)
-    // `resolveAuth` may accept a cookie session, which carries no bearer token
-    // — and `VerifyResult` exposes the claims, not the raw JWT. Actions need
-    // the token itself (user-billed integrations forward it), so a call
-    // without one is refused as an auth failure, next to the check above,
-    // rather than crashing on a missing header further down.
+    // Actions require verified bearer auth; integrations may forward the JWT.
     const authHeader = c.req.header('Authorization') ?? ''
     const callerJwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
     if (!callerJwt) return c.json({ error: 'Unauthorized' }, 401)
+    const name = c.req.param('name')
+    // Never dispatch inherited Object properties (e.g. constructor): they are
+    // not actions and must never receive the privileged context or environment.
+    if (!Object.hasOwn(actions, name)) return c.json({ error: 'Action not found' }, 404)
+    const action = actions[name]
     // Who called: actions run RBAC-off and can bill the owner, and the
     // platform's request log carries no user — this line is the attribution.
     // The name is a decoded path segment, so it is quoted, never interpolated raw.
     console.info(`[action] ${JSON.stringify(c.req.param('name'))} caller=${auth.userId}`)
-    const name = c.req.param('name')
-    const action = actions[name]
-    if (!action) return c.json({ error: 'Action not found' }, 404)
-    const params = await c.req.json<Record<string, unknown>>()
+    let params: Record<string, unknown>
+    try {
+      const body: unknown = await c.req.json()
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return c.json({ error: 'Expected a JSON object.' }, 400)
+      }
+      params = body as Record<string, unknown>
+    } catch {
+      return c.json({ error: 'Invalid JSON.' }, 400)
+    }
     const tools = createActionTools(c.env, auth.userId, callerJwt)
     const result = await action({ userId: auth.userId, params, tools, env: c.env, callerJwt })
     return c.json(result as unknown as Record<string, unknown>)

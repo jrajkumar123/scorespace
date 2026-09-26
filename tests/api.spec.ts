@@ -16,3 +16,14 @@ test.describe('API tests', () => {
     // If the app loaded and connected, the WS endpoint works
   })
 })
+
+// Unauthenticated requests cannot reach even a registered privileged action.
+test('action routes reject anonymous and forged-identity requests', async ({ request }) => {
+  for (const name of ['addCompetitor', 'addJudge', 'submitScore', 'constructor']) {
+    const response = await request.post(`/api/actions/${name}`, {
+      headers: { 'X-User-Id': 'forged', 'X-App-Action': 'true' },
+      data: { userId: 'forged', competitionId: 'missing' },
+    })
+    expect(response.status()).toBe(401)
+  }
+})

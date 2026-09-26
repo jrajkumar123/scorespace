@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getAuthToken, useAuth, useQuery } from 'deepspace'
 import { Button, EmptyState, Input, Label } from '@/components/ui'
+import { formatResultScore } from '@/lib/standings'
 import type { Competition } from '@/schemas/competitions-schema'
 import type { Competitor } from '@/schemas/competitors-schema'
 import type { Score } from '@/schemas/scores-schema'
@@ -10,8 +11,7 @@ export default function JudgingPage() {
   const { competitionId } = useParams<{ competitionId: string }>()
   return (
     <section className="mx-auto w-full max-w-4xl space-y-6 px-6 py-10">
-      <Link className="text-sm underline underline-offset-4"
-        to={competitionId ? `/competitions/${encodeURIComponent(competitionId)}` : '/home'}>Back to competition</Link>
+
       {competitionId ? <JudgingCompetition key={competitionId} competitionId={competitionId} />
         : <p role="alert">Competition not found or unavailable.</p>}
     </section>
@@ -19,13 +19,19 @@ export default function JudgingPage() {
 }
 
 function JudgingCompetition({ competitionId }: { competitionId: string }) {
+  const { userId } = useAuth()
   const { records, status, error } = useQuery<Competition>('competitions', { where: { recordId: competitionId } })
-  if (status === 'loading') return <p role="status">Loading competition…</p>
-  if (status === 'error') return <p role="alert">Could not load competition: {error ?? 'Connection unavailable.'}</p>
+  const dashboardLink = <Link className="text-sm underline underline-offset-4" to="/home">Back to dashboard</Link>
+  if (status === 'loading') return <>{dashboardLink}<p role="status">Loading competition…</p></>
+  if (status === 'error') return <>{dashboardLink}<p role="alert">Could not load competition: {error ?? 'Connection unavailable.'}</p></>
   const competition = records[0]
-  if (!competition) return <p role="alert">Competition not found or unavailable.</p>
+  if (!competition) return <>{dashboardLink}<p role="alert">Competition not found or unavailable.</p></>
+  const organizer = competition.createdBy === userId
   return (
     <>
+      {organizer ? <Link className="text-sm underline underline-offset-4"
+        to={`/competitions/${encodeURIComponent(competition.recordId)}`}>Back to competition</Link> : dashboardLink}
+      <p className="text-sm text-muted-foreground">{organizer ? 'Organizer · Your scores' : 'Assigned judge · Your scores'}</p>
       <h1 className="break-words text-3xl font-semibold">Judge {competition.data.name}</h1>
       <p className="text-muted-foreground">Submit one score from 1 to 10 per competitor. Decimals are allowed. Submitted scores cannot be changed.</p>
       <JudgingList competitionId={competition.recordId} />
@@ -95,7 +101,7 @@ function ScoreForm({ competitionId, competitorId, competitorName, submittedScore
     }
   }
 
-  if (submittedScore !== undefined) return <p role="status">Your submitted score: <strong>{submittedScore}</strong> / 10</p>
+  if (submittedScore !== undefined) return <p role="status">Your submitted score: <strong>{formatResultScore(submittedScore)}</strong> / 10</p>
   if (accepted) return <p role="status">Score saved. Waiting for synchronized score…</p>
   return (
     <form onSubmit={submit} className="space-y-3">
