@@ -31,6 +31,8 @@ function CompetitionDetail({ competitionId }: { competitionId: string }) {
   return (
     <>
       <h1 className="break-words text-3xl font-semibold">{competition.data.name}</h1>
+      <Link className="inline-block rounded-lg bg-primary px-4 py-2 text-primary-foreground"
+        to={`/competitions/${encodeURIComponent(competition.recordId)}/judge`}>Judge Competition</Link>
       <Competitors competitionId={competition.recordId} />
     </>
   )
