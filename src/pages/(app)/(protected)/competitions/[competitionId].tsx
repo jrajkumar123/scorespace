@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { getAuthToken, useAuth, useQuery } from 'deepspace'
 import {
   Button, Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -8,6 +8,7 @@ import {
 import { competitionDestination } from '@/lib/competition-navigation'
 import { PublicResultsSharing } from '@/components/public-results-sharing'
 import { CompetitionJudges } from '@/components/competition-judges'
+import { LifecycleAction } from '@/components/lifecycle-action'
 import type { Competition } from '@/schemas/competitions-schema'
 import type { Competitor } from '@/schemas/competitors-schema'
 
@@ -23,6 +24,7 @@ export default function CompetitionPage() {
 }
 
 function CompetitionDetail({ competitionId }: { competitionId: string }) {
+  const navigate = useNavigate()
   const { userId } = useAuth()
   const { records, status, error } = useQuery<Competition>('competitions', {
     where: { recordId: competitionId },
@@ -48,6 +50,12 @@ function CompetitionDetail({ competitionId }: { competitionId: string }) {
       <Competitors competitionId={competition.recordId} />
       <CompetitionJudges competitionId={competition.recordId} />
       <PublicResultsSharing competitionId={competition.recordId} />
+      <div className="border-t border-border pt-4">
+        <LifecycleAction action="deleteCompetition" params={{ competitionId }} label="Delete Competition"
+          confirmationName={competition.data.name}
+          description={`Delete “${competition.data.name}”? This permanently deletes the competition, competitors, judge assignments, scores, and published results.`}
+          onSuccess={() => navigate('/home', { replace: true })} />
+      </div>
     </>
   )
 }
@@ -108,7 +116,11 @@ function Competitors({ competitionId }: { competitionId: string }) {
       {records.length > 0 && (
         <ul aria-label="Competitors" className="space-y-3">
           {records.map((competitor) => (
-            <li key={competitor.recordId} className="break-words rounded-lg border border-border bg-card p-5">{competitor.data.name}</li>
+            <li key={competitor.recordId} className="flex flex-wrap items-center justify-between gap-3 break-words rounded-lg border border-border bg-card p-5">
+              <span>{competitor.data.name}</span>
+              <LifecycleAction action="removeCompetitor" params={{ competitionId, competitorId: competitor.recordId }} label="Remove Competitor"
+                description={`Remove “${competitor.data.name}”? This permanently deletes this competitor and all scores submitted for them.`} />
+            </li>
           ))}
         </ul>
       )}

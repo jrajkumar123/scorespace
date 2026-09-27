@@ -24,7 +24,7 @@ async function prepareJudging(page: Page) {
   await page.getByRole('button', { name: 'Add Competitor', exact: true }).click()
   await page.getByLabel('Competitor name').fill('Ada')
   await page.getByRole('dialog').getByRole('button', { name: 'Add Competitor', exact: true }).click()
-  await expect(page.getByRole('listitem').filter({ hasText: 'Ada' })).toHaveText('Ada')
+  await expect(page.getByRole('listitem').filter({ hasText: 'Ada' }).getByText('Ada', { exact: true })).toHaveText('Ada')
   await page.getByRole('link', { name: 'Judge Competition' }).click()
   await expect(page.getByRole('heading', { name: `Judge ${competition}`, exact: true })).toBeVisible()
   await expect(page.getByLabel('Score for Ada')).toBeVisible()

@@ -24,7 +24,7 @@ async function addCompetitor(page: Page, name: string) {
   await page.getByLabel('Competitor name').fill(name)
   await page.getByRole('dialog').getByRole('button', { name: 'Add Competitor', exact: true }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
-  await expect(page.getByRole('listitem').filter({ hasText: name })).toHaveText(name)
+  await expect(page.getByRole('listitem').filter({ hasText: name }).getByText(name, { exact: true })).toHaveText(name)
 }
 
 async function submitScore(page: Page, name: string, value: string) {

@@ -19,7 +19,7 @@ test.describe('API tests', () => {
 
 // Unauthenticated requests cannot reach even a registered privileged action.
 test('action routes reject anonymous and forged-identity requests', async ({ request }) => {
-  for (const name of ['addCompetitor', 'addJudge', 'submitScore', 'constructor']) {
+  for (const name of ['addCompetitor', 'addJudge', 'submitScore', 'removeJudge', 'removeCompetitor', 'deleteCompetition', 'constructor']) {
     const response = await request.post(`/api/actions/${name}`, {
       headers: { 'X-User-Id': 'forged', 'X-App-Action': 'true' },
       data: { userId: 'forged', competitionId: 'missing' },

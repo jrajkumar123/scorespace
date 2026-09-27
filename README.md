@@ -3,7 +3,8 @@
 A small live competition judging app built with React, TypeScript, and DeepSpace.
 An organizer creates a competition, adds competitors, authorizes existing users
 as judges, and watches average scores update as judges submit. Organizers can also enable
-a public, realtime spectator scoreboard.
+a public, realtime spectator scoreboard and manage judge revocation, competitor
+removal, and competition deletion.
 
 ## Using it
 
@@ -15,13 +16,16 @@ a public, realtime spectator scoreboard.
    to `/competitions/:competitionId/judge`; opening the management URL directly
    redirects an authorized judge to that judging page.
 5. Each judge, including the organizer, submits one finite score from 1 to 10
-   per competitor. Accepted scores cannot be edited or deleted.
+   per competitor. Accepted scores cannot be edited or individually deleted;
+   removing their competitor or competition deletes them as part of the cascade.
 6. The organizer opens Live Results: arithmetic averages, score counts, ties,
    and unscored competitors update automatically. Other judges' raw scores and
    the private organizer results view are not available to assigned judges.
 7. Optionally enable **Public Results** from management, then copy/open its URL.
    Spectators visit `/live/:competitionId` without signing in. They see names,
    ranks, averages and counts; they cannot judge or manage the competition.
+8. From management, revoke a judge while preserving accepted scores, remove a
+   competitor together with their scores, or delete the entire competition.
 
 ## Architecture and responsibility
 
@@ -48,8 +52,8 @@ collaborative documents, payments, or messaging.
 | --- | --- |
 | `competitions` | Name; organizer is server-assigned `createdBy`. Owner or assigned team member can read. Members/admins can create; direct updates/deletes denied. |
 | `competitors` | Name and immutable competition reference. Team-readable; only the authorized server action writes. |
-| `team_members` | Judge assignment: `teamId` = competition ID, `UserId` = existing DeepSpace identity, `status` = active. Organizer-readable; only `addJudge` writes. |
-| `scores` | Competitor/competition references and immutable value. `createdBy` identifies the judge; server-derived `organizerAccess` grants the organizer access to other judges' scores. Only `submitScore` writes. |
+| `team_members` | Judge assignment: `teamId` = competition ID, `UserId` = existing DeepSpace identity, `status` = active. Organizer-readable; server actions add/revoke assignments. |
+| `scores` | Competitor/competition references and immutable value. `createdBy` identifies the judge; server-derived `organizerAccess` grants the organizer access to other judges' scores. `submitScore` creates records; organizer lifecycle cascades delete them. |
 | `public_results` | Explicitly published, server-derived scoreboard: competition name and ordered competitor names, averages, counts, ranks and tie flags. Anonymous read allowed; all client writes denied. Envelope `createdBy` is a fixed service identity. |
 
 `useUsers()` supplies the existing roster for the picker. The UI uses names and
@@ -124,9 +128,10 @@ connection to be anonymous even for an already signed-in visitor. The page uses
 The current SDK may check the browser's session during startup; that is not a
 requirement to sign in or a results-polling mechanism.
 
-`PublicResultsRoom` intercepts existing privileged competitor/score creations,
-without changing their authorization or modifying SDK code. Once a competition
-is published, it serializes these writes with public refreshes in the same DO.
+`PublicResultsRoom` coordinates privileged competitor/score/assignment creations,
+lifecycle operations, native WebSocket messages, and public refreshes in one DO
+queue. It rechecks parent ownership or current judge membership immediately before
+persisting action writes, so earlier authorization cannot outlive a removal.
 The server reads canonical private records, reuses `deriveStandings`, explicitly
 allowlists public fields with `buildPublicResults`, and writes the projection
 through DeepSpace's record API. Normal RecordRoom broadcasts update spectators'
@@ -148,8 +153,56 @@ capability. There is no unpublish/revoke feature, and public information cannot 
 recalled from spectators. Only publish competitions whose names/results may be
 shared. Each public record contains a whole scoreboard, appropriate for this
 small app rather than an unbounded competition. Future competitor editing,
-score deletion, ownership transfer, or additional write paths must update the
+individual score deletion, ownership transfer, or additional write paths must update the
 projection coordination rules.
+
+## Organizer lifecycle and recovery
+
+Three authenticated server actions (`removeJudge`, `removeCompetitor`, and
+`deleteCompetition`) forward only validated IDs and the verified caller to a
+private room route. The room loads the competition and compares `createdBy`
+with that caller. App-wide admin status does not override competition ownership.
+Targets must belong to that competition; collection permissions are unchanged.
+
+- **Remove Judge:** deletes the deterministic `team_members` assignment only.
+  The SDK sends a resubscribe notification, removing the competition/competitors
+  from that judge's authorized queries. Future score submissions are rejected,
+  including requests waiting to persist when revocation happened. Accepted scores
+  and their aggregate contributions remain. Under the existing author ACL, a
+  revoked judge can still read their own historical score records; revocation
+  cannot recall data already delivered or hide intentionally public results.
+- **Remove Competitor:** invalidates the public projection, deletes scores scoped
+  to that competition and competitor, then deletes the competitor. If previously
+  published (or publication was pending), it rebuilds sanitized results before
+  confirming success. Other competitors and their scores remain untouched.
+- **Delete Competition:** invalidates public results and clears publication intent,
+  then deletes scores, competitors, assignments, and finally the competition.
+  Successful cleanup removes its lifecycle marker. The organizer returns to
+  `/home`; spectators see the existing unavailable state.
+
+The UI uses destructive confirmation dialogs; competition deletion requires its
+exact name. Server authorization remains mandatory regardless of UI confirmation.
+SDK `records.delete`/`records.deleteWhere` preserve normal permission-filtered
+broadcasts; bounded delete batches are drained until complete. `useQuery` updates
+open clients without polling. Completion also requests fresh subscriptions to
+recover a broadcast interrupted by a room restart.
+
+Cascades are **resumable, not atomic**. Before deletion, a private
+`lifecycle:pending:<competitionId>` KV marker records the operation, verified
+owner, target, and publication intent. The existing DO alarm retries unfinished
+work after roughly 30 seconds. Pending cleanup blocks new writes/publication for
+that competition; an owner retry can resume the same operation even after the
+parent was deleted. Missing records are harmless during recovery. No new
+collections, permissions, external services, or SDK modifications are needed.
+
+During cleanup, private views can briefly show partial deletion and the public
+page can briefly show unavailable. If cleanup fails, the action reports pending
+instead of success; the public projection stays unavailable once invalidated.
+Persistent storage failures require investigation (`[lifecycle]` logs); recovery
+cannot promise a fixed deadline. An empty scheduled alarm may fire once after
+successful cleanup and does nothing. Deletion is permanent, with no undo, and
+does not retract previously downloaded public data. The shared queue and full
+scoreboard rebuild suit this small app, not an unbounded dataset.
 
 ## Local development
 
@@ -188,11 +241,11 @@ permission, broadcast, and concurrency checks. Cloudflare sockets and platform
 membership lookup are adapted/mocked; these are not full production-auth tests.
 HTTP dispatcher tests use fake credentials and verify own-property dispatch.
 
-Latest local verification for the spectator extension: typecheck, lint, build,
-and `git diff --check` passed; 93 unit/integration tests passed; 13 browser/API
-tests passed and 10 authenticated tests skipped because no test accounts were
-configured. The anonymous route/connection was exercised; the full signed-in
-publication-to-spectator browser flow still needs the manual checklist below.
+Lifecycle integration tests additionally cover ownership refusals, preserved
+historical scores, scoped cascades across multiple delete batches, delayed-write
+races, interrupted deletion/projection recovery, and ID reuse during pending
+cleanup. Current verification results are recorded in `SUBMISSION.md`; skipped
+authenticated tests and the manual checklist below are not claimed as verified.
 
 Authenticated browser specs require configured DeepSpace test accounts. The
 runner reports skips when none are available; skipped tests are not verification.
@@ -219,10 +272,21 @@ Manual two-user checklist (separate browser profiles):
 - Check spectator WebSocket frames: no `scores` records, judge IDs, roster, or
   private competitor IDs. Reload the spectator page and verify persistence.
 - Repeat at a narrow viewport and check keyboard access to forms/navigation.
+- With B's dashboard/judging page and a spectator page open, A removes B as judge.
+  B loses the competition without refresh and cannot submit again; accepted scores,
+  averages, and counts remain. Reassign B to verify their accepted score persists.
+- Cancel competitor removal once, then confirm it. Check that competitor and all
+  its scores disappear from management, private results, and the spectator page;
+  another competitor's scores remain. Reload to check persistence.
+- Create a second competition as a control. Delete the first by typing its name.
+  Check A returns to the dashboard, B loses access, its public URL is unavailable
+  before and after reload, and the control competition remains unchanged.
+- Judges/unrelated users should have no lifecycle controls. In developer tools,
+  repeat lifecycle requests with their credentials: the server must refuse them.
 
 ## Deployment
 
-The spectator extension is local-only until deliberately deployed. The earlier
+The spectator and lifecycle extensions are local-only until deliberately deployed. The earlier
 Milestone 6 release was deployed at `https://scorespace.app.space`; that release
 does **not** include this extension. No automatic commit or deployment is part
 of the spectator-feature task.
@@ -247,9 +311,9 @@ release/runtime evidence. Do not submit the exercise automatically.
 
 ## Limits and interview map
 
-This is a small exercise: no invitations, judge removal, ownership transfer,
-score editing/deletion, rounds, criteria, unpublishing, or result finalization.
-Adding revocation/transfer requires revisiting membership changes and score ACLs.
+This is a small exercise: no invitations, ownership transfer, individual score
+editing/deletion, rounds, criteria, unpublishing, or result finalization.
+Ownership transfer would require revisiting membership and score ACLs.
 No large-competition pagination/scale guarantee is provided. Existing records
 are not copied from local development into production by deploying code.
 
@@ -267,6 +331,10 @@ Highest-value files to understand:
   `src/lib/public-results.ts`: publication ownership, serialized projection,
   durable recovery, and the boundary between raw private records and public data.
 - `src/pages/(spectator)/`: anonymous realtime connection and public scoreboard.
+- `src/actions/lifecycle.ts` and `src/server/public-results-room.ts`: validated
+  lifecycle commands, ownership at persistence, cascade order and durable retries.
+- `src/components/lifecycle-action.tsx`: confirmed requests and destructive dialogs;
+  `src/server/public-results-room.test.ts`: authorization, concurrency and recovery evidence.
 
 See `SUBMISSION.md` for an editable, explicit account of agent involvement and
 personal-verification placeholders.

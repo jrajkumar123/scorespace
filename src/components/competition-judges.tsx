@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { getAuthToken, useAuth, useQuery, useUsers } from 'deepspace'
 import { Button, Label, useToast } from '@/components/ui'
 import type { TeamMember } from '@/schemas/team-members-schema'
+import { LifecycleAction } from '@/components/lifecycle-action'
 
 export function CompetitionJudges({ competitionId }: { competitionId: string }) {
   const { userId } = useAuth()
@@ -51,8 +52,10 @@ export function CompetitionJudges({ competitionId }: { competitionId: string }) 
       {assignments.status === 'ready' && !assignments.records.length && <p>No additional judges yet.</p>}
       <ul aria-label="Authorized judges" className="space-y-2">
         {assignments.records.map(({ recordId, data }) => (
-          <li key={recordId} className="break-words rounded-lg border border-border p-3">
-            {users.find((user) => user.id === data.UserId)?.name || 'User'} · {data.UserId}
+          <li key={recordId} className="flex flex-wrap items-center justify-between gap-3 break-words rounded-lg border border-border p-3">
+            <span>{users.find((user) => user.id === data.UserId)?.name || 'User'} · {data.UserId}</span>
+            <LifecycleAction action="removeJudge" params={{ competitionId, judgeId: data.UserId }} label="Remove Judge"
+              description={`Remove ${users.find((user) => user.id === data.UserId)?.name || data.UserId} as a judge? They will lose access to this competition. Scores they already submitted will be preserved.`} />
           </li>
         ))}
       </ul>
