@@ -2,7 +2,8 @@
 
 A small live competition judging app built with React, TypeScript, and DeepSpace.
 An organizer creates a competition, adds competitors, authorizes existing users
-as judges, and watches average scores update as judges submit.
+as judges, and watches average scores update as judges submit. Organizers can also enable
+a public, realtime spectator scoreboard.
 
 ## Using it
 
@@ -17,7 +18,10 @@ as judges, and watches average scores update as judges submit.
    per competitor. Accepted scores cannot be edited or deleted.
 6. The organizer opens Live Results: arithmetic averages, score counts, ties,
    and unscored competitors update automatically. Other judges' raw scores and
-   the results view are not available to assigned judges.
+   the private organizer results view are not available to assigned judges.
+7. Optionally enable **Public Results** from management, then copy/open its URL.
+   Spectators visit `/live/:competitionId` without signing in. They see names,
+   ranks, averages and counts; they cannot judge or manage the competition.
 
 ## Architecture and responsibility
 
@@ -27,7 +31,8 @@ page mounts no auth or record providers. The app layout mounts
 `DeepSpaceAuthProvider`, `RecordProvider`, and `RecordScope`. The protected layout
 uses `AuthGate`; the dashboard also has an auth gate.
 
-`worker.ts` assembles the Hono routes and `AppRecordRoom`. DeepSpace supplies
+`worker.ts` assembles the Hono routes and `AppRecordRoom`, which extends the
+app-owned `PublicResultsRoom` projection coordinator. DeepSpace supplies
 verified authentication, Durable Object SQLite record persistence, collection
 permissions, WebSocket broadcasts, and synchronized `useQuery` state.
 `src/constants.ts` gets the immutable app ID from the build and uses the shared
@@ -45,6 +50,7 @@ collaborative documents, payments, or messaging.
 | `competitors` | Name and immutable competition reference. Team-readable; only the authorized server action writes. |
 | `team_members` | Judge assignment: `teamId` = competition ID, `UserId` = existing DeepSpace identity, `status` = active. Organizer-readable; only `addJudge` writes. |
 | `scores` | Competitor/competition references and immutable value. `createdBy` identifies the judge; server-derived `organizerAccess` grants the organizer access to other judges' scores. Only `submitScore` writes. |
+| `public_results` | Explicitly published, server-derived scoreboard: competition name and ordered competitor names, averages, counts, ranks and tie flags. Anonymous read allowed; all client writes denied. Envelope `createdBy` is a fixed service identity. |
 
 `useUsers()` supplies the existing roster for the picker. The UI uses names and
 IDs, not emails or a globally readable full-users query. Existing SDK admin
@@ -55,7 +61,7 @@ role, distinct from the app-wide DeepSpace admin role.
 
 Collection permissions apply to queries, record gets, and broadcasts. Frontend
 filters and redirects are only presentation. An unrelated user receives no
-competition record, even with a guessed ID.
+private competition record, even with a guessed ID.
 
 `src/server/action-routes.ts` verifies bearer authentication before dispatching
 only explicitly registered actions. Action tools bypass collection RBAC, so:
@@ -91,7 +97,9 @@ Score submission follows:
 broadcast → useQuery changes → deriveStandings → React renders`
 
 UI success waits for server acceptance. Record lists come from synchronized
-queries, not an optimistic duplicate list, polling, or a persisted leaderboard.
+queries, not an optimistic duplicate list or polling. Private results are derived
+in the organizer's browser. Public results use a persisted, server-derived safe
+projection because spectators must never receive the underlying private scores.
 The judging query selects the current author's scores, including when that author
 is also an organizer who is permitted to read others' scores.
 
@@ -101,6 +109,47 @@ numbers; exact equal values rank `1, 1, 3`. Unscored entries follow scored ones.
 Integers display one decimal; other numbers retain their numeric representation.
 Binary floating-point can produce long fractions or tiny differences between
 mathematically equivalent decimal calculations; there is no decimal rounding rule.
+
+## Public spectators and privacy
+
+Publication is explicit and organizer-only. `publishResults` checks app membership
+and forwards verified identity to a private DO route, which checks competition
+ownership. A page visit cannot publish data. An absent public record yields the
+same unavailable state whether a competition is missing or simply unpublished.
+
+`src/pages/(spectator)/_layout.tsx` is outside the protected/app-management layout.
+It uses the existing auth provider to finish SDK startup, but forces the record
+connection to be anonymous even for an already signed-in visitor. The page uses
+`useQuery('public_results')`; no login, roster, or private score query is required.
+The current SDK may check the browser's session during startup; that is not a
+requirement to sign in or a results-polling mechanism.
+
+`PublicResultsRoom` intercepts existing privileged competitor/score creations,
+without changing their authorization or modifying SDK code. Once a competition
+is published, it serializes these writes with public refreshes in the same DO.
+The server reads canonical private records, reuses `deriveStandings`, explicitly
+allowlists public fields with `buildPublicResults`, and writes the projection
+through DeepSpace's record API. Normal RecordRoom broadcasts update spectators'
+queries. Owner/judge private subscriptions continue working as before.
+
+A durable KV pending marker and a Durable Object alarm protect the gap between a
+private write and its public projection. The marker is persisted before the
+private mutation. A failed refresh does not undo an accepted immutable score;
+the alarm retries after roughly 30 seconds, including after a room restart.
+Successful operations refresh immediately. Recovery alarms run only for pending
+work, not as periodic leaderboard polling. Projection lag is possible during a
+failure; the public page does not claim a transactional cross-view snapshot.
+
+Privacy means **no public raw records or judge identities**, not anonymity of the
+math: an average with count 1 equals one score, and differences between successive
+averages/counts can reveal a new value. Names and aggregates become intentionally
+public and discoverable through the public collection; the URL is not a secret
+capability. There is no unpublish/revoke feature, and public information cannot be
+recalled from spectators. Only publish competitions whose names/results may be
+shared. Each public record contains a whole scoreboard, appropriate for this
+small app rather than an unbounded competition. Future competitor editing,
+score deletion, ownership transfer, or additional write paths must update the
+projection coordination rules.
 
 ## Local development
 
@@ -139,6 +188,12 @@ permission, broadcast, and concurrency checks. Cloudflare sockets and platform
 membership lookup are adapted/mocked; these are not full production-auth tests.
 HTTP dispatcher tests use fake credentials and verify own-property dispatch.
 
+Latest local verification for the spectator extension: typecheck, lint, build,
+and `git diff --check` passed; 93 unit/integration tests passed; 13 browser/API
+tests passed and 10 authenticated tests skipped because no test accounts were
+configured. The anonymous route/connection was exercised; the full signed-in
+publication-to-spectator browser flow still needs the manual checklist below.
+
 Authenticated browser specs require configured DeepSpace test accounts. The
 runner reports skips when none are available; skipped tests are not verification.
 Inspect `npx deepspace test accounts --help` to configure accounts without putting
@@ -155,9 +210,22 @@ Manual two-user checklist (separate browser profiles):
   B submits 9.5; A sees average 8.75 and count 2 without refresh.
 - Reload: each judging page shows only that user's accepted score, with no editing
   form. Results persist. Use a third unrelated user to repeat privacy checks.
+- Before publication, open `/live/<competitionId>` in a signed-out window: it
+  should say unavailable without asking for login.
+- A enables Public Results and copies its URL. Open it in that window; verify
+  names, ranks, counts, ties and unscored rows, with no management/judging controls.
+- Keep the public page open while A/B score or A adds a competitor. It should
+  update without reload; private organizer results should update too.
+- Check spectator WebSocket frames: no `scores` records, judge IDs, roster, or
+  private competitor IDs. Reload the spectator page and verify persistence.
 - Repeat at a narrow viewport and check keyboard access to forms/navigation.
 
 ## Deployment
+
+The spectator extension is local-only until deliberately deployed. The earlier
+Milestone 6 release was deployed at `https://scorespace.app.space`; that release
+does **not** include this extension. No automatic commit or deployment is part
+of the spectator-feature task.
 
 `npx deepspace app source --json` reports the source authority;
 `npx deepspace status --json` reports inference before the first release. This
@@ -180,7 +248,7 @@ release/runtime evidence. Do not submit the exercise automatically.
 ## Limits and interview map
 
 This is a small exercise: no invitations, judge removal, ownership transfer,
-score editing/deletion, rounds, criteria, public results, or result finalization.
+score editing/deletion, rounds, criteria, unpublishing, or result finalization.
 Adding revocation/transfer requires revisiting membership changes and score ACLs.
 No large-competition pagination/scale guarantee is provided. Existing records
 are not copied from local development into production by deploying code.
@@ -195,6 +263,10 @@ Highest-value files to understand:
 - `src/lib/competition-navigation.ts` and competition pages: role-aware
   destinations after permission-filtered reads; routing never grants access.
 - `src/pages/(app)/_layout.tsx` and `worker.ts`: providers, room scope, server wiring.
+- `src/actions/publish-results.ts`, `src/server/public-results-room.ts`, and
+  `src/lib/public-results.ts`: publication ownership, serialized projection,
+  durable recovery, and the boundary between raw private records and public data.
+- `src/pages/(spectator)/`: anonymous realtime connection and public scoreboard.
 
 See `SUBMISSION.md` for an editable, explicit account of agent involvement and
 personal-verification placeholders.

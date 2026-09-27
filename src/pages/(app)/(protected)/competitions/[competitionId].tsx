@@ -6,6 +6,7 @@ import {
   DialogHeader, DialogTitle, EmptyState, Input, Label, useToast,
 } from '@/components/ui'
 import { competitionDestination } from '@/lib/competition-navigation'
+import { PublicResultsSharing } from '@/components/public-results-sharing'
 import { CompetitionJudges } from '@/components/competition-judges'
 import type { Competition } from '@/schemas/competitions-schema'
 import type { Competitor } from '@/schemas/competitors-schema'
@@ -46,6 +47,7 @@ function CompetitionDetail({ competitionId }: { competitionId: string }) {
       </div>
       <Competitors competitionId={competition.recordId} />
       <CompetitionJudges competitionId={competition.recordId} />
+      <PublicResultsSharing competitionId={competition.recordId} />
     </>
   )
 }

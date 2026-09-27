@@ -13,7 +13,6 @@ import {
   CronRoom,
   JobRoom,
   PresenceRoom,
-  RecordRoom,
   resolveAppRole,
   workerErrorHandler,
   YjsRoom,
@@ -24,6 +23,7 @@ import { registerAgent } from './src/ai/agent.js'
 import { buildTools } from './src/ai/tools.js'
 import { tasks as cronTasks, runTask as runCronTask } from './src/cron.js'
 import { runJob } from './src/jobs.js'
+import { PublicResultsRoom } from './src/server/public-results-room.js'
 import { schemas } from './src/schemas.js'
 import { registerActionRoutes } from './src/server/action-routes.js'
 import {
@@ -44,7 +44,7 @@ export const __DO_MANIFEST__ = [
   { binding: 'JOB_ROOMS', className: 'AppJobRoom', sqlite: true },
 ] as const satisfies DOManifest
 
-export class AppRecordRoom extends RecordRoom<Env> {
+export class AppRecordRoom extends PublicResultsRoom<Env> {
   constructor(state: DurableObjectState, env: Env) {
     super(state, env, schemas, { ownerUserId: env.OWNER_USER_ID })
   }
